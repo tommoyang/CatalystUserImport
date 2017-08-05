@@ -34,7 +34,7 @@ $commands = getopt($options, $longopts);
 
 $driver = new UserUpload($commands);
 if ($driver->ready()) {
-
+    $driver->run();
 }
 
 class UserUpload {
@@ -71,36 +71,44 @@ Options:
             return;
         }
 
-        //*
-        if (array_key_exists("u", $commands) && $commands["u"]) {
-            $this->username = $commands["u"];
-        } else {
-            echo "Please provide a MYSQL Database Username (-u)\n"; return;
-        }
-
-        if (array_key_exists("p", $commands) && $commands["p"]) {
-            $this->password = $commands["p"];
-        } else {
-            echo "Please provide a MYSQL Database Password (-p)\n"; return;
-        }
-
-        if (array_key_exists("h", $commands) && $commands["h"]) {
-            $this->host = $commands["h"];
-        } else {
-            echo "Please provide a MYSQL Database Hostname (-h)\n"; return;
-        }
-        //*/
-
-        $database = UserDatabase::getDriver($this->username, $this->password, $this->host);
-        if (is_null($database)) {
-            return;
-        }
-        $this->database = $database;
-
         // --create_table       Create a new MYSQL tabe with the name 'users'. Other commands will be ignored.
         if (array_key_exists("create_table", $commands)) {
             $this->createTable = true;
             return;
+        }
+
+        // --dry_run        Used with --file, runs the script without altering the database.
+        if (!$this->createTable && array_key_exists("dry_run", $commands)) {
+            $this->dryRun = true;
+        } else {
+            //*
+            if (array_key_exists("u", $commands) && $commands["u"]) {
+                $this->username = $commands["u"];
+            } else {
+                echo "Please provide a MYSQL Database Username (-u)\n";
+                return;
+            }
+
+            if (array_key_exists("p", $commands) && $commands["p"]) {
+                $this->password = $commands["p"];
+            } else {
+                echo "Please provide a MYSQL Database Password (-p)\n";
+                return;
+            }
+
+            if (array_key_exists("h", $commands) && $commands["h"]) {
+                $this->host = $commands["h"];
+            } else {
+                echo "Please provide a MYSQL Database Hostname (-h)\n";
+                return;
+            }
+            //*/
+
+            $database = UserDatabase::getDriver($this->username, $this->password, $this->host);
+            if (is_null($database)) {
+                return;
+            }
+            $this->database = $database;
         }
 
         // --file [csv file name]       The name of the CSV file to be parsed
@@ -109,16 +117,12 @@ Options:
 
             $file = fopen($commands["file"], "r");
 
-            var_dump($file);
-
             if ($file) {
                 $this->file = $file;
+            } else {
+                echo "File could not be read (are you pointing to the right file and/or does it exist?";
+                return;
             }
-        }
-
-        // --dry_run        Used with --file, runs the script without altering the database.
-        if (array_key_exists("dry_run", $commands)) {
-            $this->dryRun = true;
         }
 
         $this->ready = true;
@@ -133,6 +137,69 @@ Options:
     public function ready()
     {
         return $this->ready;
+    }
+
+    public function run() {
+        if ($this->createTable) {
+            // TODO: Database commands
+
+            return;
+        }
+
+        $this->readCsv($this->file);
+    }
+
+    /**
+     * Reads input from the file
+     * CSV file input is assumed to be three columns, with columns being "name" "surname" and "email" in that orders
+     *
+     * @param $file
+     */
+    private function readCsv($file)
+    {
+        if (!$this->ready()) return;
+
+        while ($row = fgetcsv($file)) {
+            // Exclude column name row
+            if ($row[0] == "name" && $row[1] == "surname" && $row[2] == "email") continue;
+
+            $success = self::formatRow($row);
+
+            if (!$success) continue;
+
+            if ($this->dryRun) {
+                echo sprintf("Found row: %s\n", self::printableRow($row));
+            } else {
+                // TODO: Database commands
+            }
+
+        }
+    }
+
+    /**
+     * Formats user row for database input. Names and Surnames will be lowercase with capitalized first letter.
+     * Rows with invalid emails will be skipped
+     *
+     * @param $row
+     * @return bool
+     */
+    private static function formatRow(&$row) {
+        $row = array_map("trim", $row);
+
+        if (filter_var($row[2], FILTER_VALIDATE_EMAIL)) {
+            $row[0] = Tools::nameFormat($row[0]);
+            $row[1] = Tools::nameFormat($row[1]);
+            $row[2] = strtolower($row[2]);
+
+            return true;
+        } else {
+            echo sprintf("Invalid email, skipping: %s\n", self::printableRow($row));
+            return false;
+        }
+    }
+
+    private static function printableRow($row) {
+        return sprintf("{'%s', '%s', '%s'}", $row[0], $row[1], $row[2]);
     }
 }
 
@@ -161,5 +228,18 @@ class UserDatabase
         }
 
         return self::$driver;
+    }
+}
+
+class Tools
+{
+    /**
+     * Returns a string with the first character capitalised and the rest lower case
+     *
+     * @param $input
+     * @return string
+     */
+    public static function nameFormat($input) {
+        return ucfirst(strtolower($input));
     }
 }
