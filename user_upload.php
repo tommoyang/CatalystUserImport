@@ -263,7 +263,10 @@ class UserDatabase
     }
 
     /**
-     * Creates a 'users' table. Table has columns id, name, surname and email
+     * Creates a 'users' table. Table has columns id, firstname, surname and email
+     *
+     * Note that while the design spec has asked for a "name" field, I have chosen to name this
+     * "firstname" to avoid using the MySQL reserved keyword
      */
     public function createTable() {
         $dropUsersTableQuery = /** @lang MySQL */
@@ -277,10 +280,11 @@ class UserDatabase
     firstname VARCHAR(255) NOT NULL,
     surname VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL
-)";
+);
+CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
         $success = $this->db->exec($createUsersTableQuery);
 
-        if (!$success) {
+        if ($success === false) {
             echo "An error occurred when creating users table:\n";
             echo "\t" . $this->db->errorInfo()[2] . "\n";
         } else {
