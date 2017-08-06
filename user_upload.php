@@ -18,6 +18,7 @@ $longopts = array(
     "file:",
     "create_table",
     "dry_run",
+    "simple_names",
     "help",
 );
 
@@ -47,6 +48,7 @@ class UserUpload {
     private $createTable = false;
     private $file;
     private $dryRun = false;
+    private $simpleNames = false;
 
     private $ready = false;
 
@@ -60,6 +62,7 @@ Long options:
 --file [csv file name]      (Required) The name of the CSV users file to be parsed.
 --create_table              Create a new MYSQL tabe with the name 'users'. Other commands will be ignored.
 --dry_run                   Used with --file, runs the script without altering the database.
+--simple_names              Removes all special characters from names
 --help                      Lists all commands and instructions (what you're looking at right now).
 
 Options: 
@@ -124,6 +127,11 @@ Options:
             }
         }
 
+        // --simple_names              Removes all special characters from names
+        if (array_key_exists("simple_names", $commands)) {
+            $this->simpleNames = true;
+        }
+
         $this->ready = true;
     }
 
@@ -173,7 +181,7 @@ Options:
             // Exclude column name row
             if ($row[0] == "name" && $row[1] == "surname" && $row[2] == "email") continue;
 
-            $rowObj = new Row($row[0], $row[1], $row[2]);
+            $rowObj = new Row($row[0], $row[1], $row[2], $this->simpleNames);
 
             if (!filter_var($rowObj->getEmail(), FILTER_VALIDATE_EMAIL)) {
                 echo sprintf("Invalid email, skipping: %s\n", $rowObj->toString());
@@ -189,9 +197,15 @@ class Row {
 
     private $name, $surname, $email;
 
-    public function __construct($name, $surname, $email) {
+    public function __construct($name, $surname, $email, $simpleNames = false) {
         $this->name = Tools::nameFormat($name);
         $this->surname = Tools::nameFormat($surname);
+
+        if ($simpleNames) {
+            $this->name = Tools::alphabeticalOnly($this->name);
+            $this->surname = Tools::alphabeticalOnly($this->surname);
+        }
+
         $this->email = strtolower($email);
     }
 
@@ -375,5 +389,9 @@ class Tools {
      */
     public static function nameFormat($input) {
         return ucfirst(strtolower($input));
+    }
+
+    public static function alphabeticalOnly($input) {
+        return preg_replace("/[^A-Za-z]+/", "", $input);
     }
 }
