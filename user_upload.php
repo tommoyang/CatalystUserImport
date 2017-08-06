@@ -74,7 +74,6 @@ Options:
         // --create_table       Create a new MYSQL tabe with the name 'users'. Other commands will be ignored.
         if (array_key_exists("create_table", $commands)) {
             $this->createTable = true;
-            return;
         }
 
         // --dry_run        Used with --file, runs the script without altering the database.
@@ -143,10 +142,9 @@ Options:
         if ($this->createTable) {
             // TODO: Database commands
 
-            return;
+        } else {
+            $this->readCsv($this->file);
         }
-
-        $this->readCsv($this->file);
     }
 
     /**
