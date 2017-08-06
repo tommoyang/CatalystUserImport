@@ -9,10 +9,12 @@
 /**
  * General script options
  *
- * --file [csv file name]       (Required) The name of the CSV users file to be parsed.
- * --create_table               Create a new MYSQL tabe with the name 'users'. Other commands will be ignored.
- * --dry_run                    Used with --file, runs the script without altering the database.
- * --help                       Lists all commands and instructions (what you're looking at right now).
+ * --create_table              Create a new MYSQL table with the name 'users'. Other commands will be ignored.
+ *
+ * --file [csv file name]      The name of the CSV users file to be parsed.
+ * --dry_run                   Used with --file, runs the script without altering the database.
+ * --simple_names              Removes all special characters from names
+ * --help                      Lists all commands and instructions.
  */
 $longopts = array(
     "file:",
@@ -39,6 +41,11 @@ if ($driver->ready()) {
     $driver->run();
 }
 
+/**
+ * A simple script that processes a CSV file and imports to a MySQL database
+ * This script expects the CSV file to have three columns: name, surname and email.
+ * Users will not be imported if duplicate emails are found, or if emails are malformed
+ */
 class UserUpload {
     private $username;
     private $password;
@@ -61,8 +68,9 @@ class UserUpload {
 Usage:    php user_upload.php [long options] -u=[MYSQL Username] -p=[MYSQL Password] -h=[MYSQL host]
 
 Long options:
---file [csv file name]      (Required) The name of the CSV users file to be parsed.
---create_table              Create a new MYSQL tabe with the name 'users'. Other commands will be ignored.
+--create_table              Create a new MYSQL table with the name 'users'. Other commands will be ignored.
+
+--file [csv file name]      The name of the CSV users file to be parsed.
 --dry_run                   Used with --file, runs the script without altering the database.
 --simple_names              Removes all special characters from names
 --help                      Lists all commands and instructions (what you're looking at right now).
@@ -145,7 +153,7 @@ Options:
     /**
      * Returns a boolean of whether this script is able to run properly
      *
-     * @return bool
+     * @return bool     TRUE if the imports can be safely run
      */
     public function ready() {
         return $this->ready;
@@ -174,7 +182,7 @@ Options:
      * Reads input from the file
      * CSV file input is assumed to be three columns, with columns being "name" "surname" and "email" in that orders
      *
-     * @param $file
+     * @param resource $file CSV file to be imported
      */
     private function readCsv($file) {
         if (!$this->dryRun && !$this->database->isUsersExists()) {
@@ -217,30 +225,30 @@ class Row {
     }
 
     /**
-     * @return string
+     * @return string   Name of the user
      */
     public function getName() {
         return $this->name;
     }
 
     /**
-     * @return string
+     * @return string   Surname of the user
      */
     public function getSurname() {
         return $this->surname;
     }
 
     /**
-     * @return string
+     * @return string   Email of the user
      */
     public function getEmail() {
         return $this->email;
     }
 
     /**
-     * Returns a string representation of the row
+     * Returns a string representation of the user
      *
-     * @return string
+     * @return string   String representation of the user
      */
     public function toString() {
         return sprintf("{'%s', '%s', '%s'}", $this->name, $this->surname, $this->email);
@@ -283,7 +291,7 @@ class UserDatabase {
     /**
      * Returns a boolean variable indicating whether the users table already exists.
      *
-     * @return bool
+     * @return bool     TRUE if the users table exists
      */
     public function isUsersExists() {
         // Check to see if the users table already exists
@@ -332,10 +340,10 @@ CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
     }
 
     /**
-     * Inserts a row into the database.
+     * Inserts a user into the database.
      *
-     * @param Row $row
-     * @param bool $dry_run
+     * @param Row $row The user to insert
+     * @param bool $dry_run FALSE if values should be input into the database
      */
     public function insertRow($row, $dry_run = false) {
         // Check if email already exists in table
@@ -390,13 +398,19 @@ class Tools {
     /**
      * Returns a string with the first character capitalised and the rest lower case
      *
-     * @param $input
-     * @return string
+     * @param string $input     String to format
+     * @return string           Formatted string
      */
     public static function nameFormat($input) {
         return ucfirst(strtolower($input));
     }
 
+    /**
+     * Returns a string with all non-alphabetical characters removed
+     *
+     * @param string $input     String to format
+     * @return string           Formatted string
+     */
     public static function alphabeticalOnly($input) {
         return preg_replace("/[^A-Za-z]+/", "", $input);
     }
