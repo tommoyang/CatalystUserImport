@@ -140,8 +140,18 @@ Options:
 
     public function run() {
         if ($this->createTable) {
-            // TODO: Database commands
+            $exists = $this->database->isUsersExists();
+            if ($exists) {
+                // Existing database found, confirm overwrite
+                $confirmation = readline("Users table already exists, are you sure you want to overwrite? y/n: ");
 
+                if (trim($confirmation) != "y") {
+                    echo "No changes have been made, Exiting\n";
+                    return;
+                }
+            }
+
+            $this->database->createTable();
         } else {
             $this->readCsv($this->file);
         }
@@ -203,29 +213,79 @@ Options:
 
 class UserDatabase
 {
-    const DSN_BASE = "mysql:dbname=users;host=";
+    const DSN_BASE = "mysql:dbname=catalystUsers;host=";
 
     private static $driver = null;
 
+    private $db = null;
+
     private function __construct($username, $password, $host) {
         try {
-            $dsn = self::DSN_BASE . $host;
-            $driver = new PDO($dsn, $username, $password);
-
-            return $driver;
+            $dsn = "mysql:dbname=catalystUsers;host=" . $host;
+            $this->db = new PDO($dsn, $username, $password);
         } catch (PDOException $exception) {
             echo "Connection Failed: " . $exception->getMessage() . "\n";
         }
-
-        return null;
     }
 
+    /**
+     * Initializes the PDO database driver if it hasn't been initialized already.
+     * Otherwise, returns the current database driver.
+     * If an error occurs when initializing the database, a null object is returned.
+     *
+     * @param $username
+     * @param $password
+     * @param $host
+     * @return null|UserDatabase
+     */
     public static function getDriver($username, $password, $host) {
         if (!self::$driver) {
             self::$driver = new UserDatabase($username, $password, $host);
         }
 
         return self::$driver;
+    }
+
+    /**
+     * Returns a boolean variable indicating whether the users table already exists.
+     *
+     * @return bool
+     */
+    public function isUsersExists() {
+        // Check to see if the users table already exists
+        $testUsersTableQuery = /** @lang MySQL */ "SHOW TABLES LIKE 'users'";
+
+        $statement = $this->db->query($testUsersTableQuery);
+        $statement->execute();
+        $exists = (bool) $statement->fetch();
+
+        return $exists;
+    }
+
+    /**
+     * Creates a 'users' table. Table has columns id, name, surname and email
+     */
+    public function createTable() {
+        $dropUsersTableQuery = /** @lang MySQL */
+        "DROP TABLE IF EXISTS `users`";
+        $this->db->exec($dropUsersTableQuery);
+
+        $createUsersTableQuery = /** @lang MySQL */
+        "CREATE TABLE `users`
+(
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    firstname VARCHAR(255) NOT NULL,
+    surname VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL
+)";
+        $success = $this->db->exec($createUsersTableQuery);
+
+        if (!$success) {
+            echo "An error occurred when creating users table:\n";
+            echo "\t" . $this->db->errorInfo()[2] . "\n";
+        } else {
+            echo "Users table successfully created\n";
+        }
     }
 }
 
