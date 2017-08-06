@@ -133,8 +133,7 @@ Options:
      *
      * @return bool
      */
-    public function ready()
-    {
+    public function ready() {
         return $this->ready;
     }
 
@@ -163,8 +162,7 @@ Options:
      *
      * @param $file
      */
-    private function readCsv($file)
-    {
+    private function readCsv($file) {
         if (!$this->ready()) return;
 
         while ($row = fgetcsv($file)) {
@@ -211,8 +209,7 @@ Options:
     }
 }
 
-class UserDatabase
-{
+class UserDatabase {
     const DSN_BASE = "mysql:dbname=catalystUsers;host=";
 
     private static $driver = null;
@@ -253,11 +250,12 @@ class UserDatabase
      */
     public function isUsersExists() {
         // Check to see if the users table already exists
-        $testUsersTableQuery = /** @lang MySQL */ "SHOW TABLES LIKE 'users'";
+        $testUsersTableQuery = /** @lang MySQL */
+            "SHOW TABLES LIKE 'users'";
 
         $statement = $this->db->query($testUsersTableQuery);
         $statement->execute();
-        $exists = (bool) $statement->fetch();
+        $exists = (bool)$statement->fetch();
 
         return $exists;
     }
@@ -270,11 +268,11 @@ class UserDatabase
      */
     public function createTable() {
         $dropUsersTableQuery = /** @lang MySQL */
-        "DROP TABLE IF EXISTS `users`";
+            "DROP TABLE IF EXISTS `users`";
         $this->db->exec($dropUsersTableQuery);
 
         $createUsersTableQuery = /** @lang MySQL */
-        "CREATE TABLE `users`
+            "CREATE TABLE `users`
 (
     id INT PRIMARY KEY AUTO_INCREMENT,
     firstname VARCHAR(255) NOT NULL,
@@ -293,8 +291,7 @@ CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
     }
 }
 
-class Tools
-{
+class Tools {
     /**
      * Returns a string with the first character capitalised and the rest lower case
      *
