@@ -1,12 +1,22 @@
 # CSV to MYSQL User Import CLI Script
 
-A simple script that processes a CSV file and imports to a MySQL database 
+A simple script that processes a CSV file and imports to a MySQL database.
 
-Usage:
+This script expects the CSV file to have three columns: name, surname and email.
+
+Users will not be imported if duplicate emails are found, or if emails are malformed.
+
+##Dependencies
+
+PHP Version 7.0 with pdo_mysql (`apt-get install php-mysql`)
+
+A MySQL database version 5.7 or later
+
+##Usage:
 
 `php user_upload.php [long options] -u=[MYSQL Username] -p=[MYSQL Password] -h=[MYSQL host]`
 
-Long options:
+##Long options:
 
 `--file [csv file name]      (Required) The name of the CSV users file to be parsed.`
   
@@ -16,7 +26,7 @@ Long options:
 
 `--help                      Lists all commands and instructions (what you're looking at right now).`
 
-Options:
+##Options:
 
 `-u      MySQL Username`
 
