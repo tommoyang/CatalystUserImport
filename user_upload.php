@@ -127,7 +127,6 @@ Options:
         $this->ready = true;
     }
 
-
     /**
      * Returns a boolean of whether this script is able to run properly
      *
@@ -163,39 +162,26 @@ Options:
      * @param $file
      */
     private function readCsv($file) {
-        if (!$this->ready()) return;
+        if (!$this->dryRun && !$this->database->isUsersExists()) {
+            echo "Users database does not exist. Please run this script using the --create_table command";
+            return;
+        }
 
         while ($row = fgetcsv($file)) {
+            $row = array_map("trim", $row);
+
             // Exclude column name row
             if ($row[0] == "name" && $row[1] == "surname" && $row[2] == "email") continue;
 
-            $rowObj = self::formatRow($row);
+            $rowObj = new Row($row[0], $row[1], $row[2]);
+
             if (!filter_var($rowObj->getEmail(), FILTER_VALIDATE_EMAIL)) {
                 echo sprintf("Invalid email, skipping: %s\n", $rowObj->toString());
                 continue;
             }
 
-            if ($this->dryRun) {
-                echo sprintf("Found row: %s\n", $rowObj->toString());
-            } else {
-                // TODO: Database commands
-            }
-
+            $this->database->insertRow($rowObj, $this->dryRun);
         }
-    }
-
-    /**
-     * Formats user row for database input. Names and Surnames will be lowercase with capitalized first letter.
-     * Rows with invalid emails will be skipped
-     *
-     * @param $row
-     * @return Row
-     */
-    private static function formatRow($row) {
-        $row = array_map("trim", $row);
-
-        $rowObj = new Row($row[0], $row[1], $row[2]);
-        return $rowObj;
     }
 }
 
@@ -293,11 +279,10 @@ class UserDatabase {
 
     /**
      * Creates a 'users' table. Table has columns id, firstname, surname and email
-     *
-     * Note that while the design spec has asked for a "name" field, I have chosen to name this
-     * "firstname" to avoid using the MySQL reserved keyword
      */
     public function createTable() {
+        $this->db->beginTransaction();
+
         $dropUsersTableQuery = /** @lang MySQL */
             "DROP TABLE IF EXISTS `users`";
         $this->db->exec($dropUsersTableQuery);
@@ -305,19 +290,78 @@ class UserDatabase {
         $createUsersTableQuery = /** @lang MySQL */
             "CREATE TABLE `users`
 (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    firstname VARCHAR(255) NOT NULL,
-    surname VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL
+    `id` INT PRIMARY KEY AUTO_INCREMENT,
+    `name` VARCHAR(255) NOT NULL,
+    `surname` VARCHAR(255) NOT NULL,
+    `email` VARCHAR(255) NOT NULL
 );
 CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
         $success = $this->db->exec($createUsersTableQuery);
 
         if ($success === false) {
             echo "An error occurred when creating users table:\n";
-            echo "\t" . $this->db->errorInfo()[2] . "\n";
+            echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
+            echo "No changes have been made to the database.\n";
+
+            $this->db->rollBack();
         } else {
-            echo "Users table successfully created\n";
+            echo "Users table successfully created.\n";
+
+            $this->db->commit();
+        }
+    }
+
+    /**
+     * Inserts a row into the database.
+     *
+     * @param Row $row
+     * @param bool $dry_run
+     */
+    public function insertRow($row, $dry_run = false) {
+        // Check if email already exists in table
+        $testUserExistsQuery = /** @lang MySQL */
+            "SELECT u.email FROM users u WHERE u.email = ?";
+        $statement = $this->db->prepare($testUserExistsQuery);
+        $success = $statement->execute(array($row->getEmail()));
+
+        if ($success === false) {
+            echo sprintf("An error occurred when checking for user: %s\n"), $row->toString();
+            echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
+            echo "No changes have been made.\n";
+
+            return;
+        }
+
+        $result = $statement->fetchAll();
+
+        // Email already exists
+        if (count($result) > 0) {
+            echo sprintf("User already exists, skipping: %s\n", $row->toString());
+            return;
+        }
+
+        $this->db->beginTransaction();
+
+        $insertRowQuery = /** @lang MySQL */
+            "INSERT INTO users (`name`, `surname`, `email`) VALUES (?, ?, ?)";
+
+        $statement = $this->db->prepare($insertRowQuery);
+        $success = $statement->execute(array($row->getName(), $row->getSurname(), $row->getEmail()));
+
+        if ($success === false) {
+            echo sprintf("User was not added: %s\n", $row->toString());
+            echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
+            echo "No changes have been made.\n";
+
+            $this->db->rollBack();
+            return;
+        }
+
+        if ($dry_run) {
+            // Dry run, no database commits should be made
+            $this->db->rollBack();
+        } else {
+            $this->db->commit();
         }
     }
 }
