@@ -28,6 +28,7 @@ $longopts = array(
  * -u       MySQL Username
  * -p       MySQL Password
  * -h       MySQL Hostname
+ * -d       MySQL Database Name (defaults to 'catalystUsers')
  */
 $options = "u::p::h::";
 
@@ -42,6 +43,7 @@ class UserUpload {
     private $username;
     private $password;
     private $host;
+    private $databaseName = "catalystUsers";
 
     private $database;
 
@@ -69,6 +71,7 @@ Options:
 -u      MySQL Username
 -p      MySQL Password
 -h      MySQL Hostname
+-d      MySQL Database Name (defaults to 'catalystUsers')
 ";
 
             return;
@@ -104,9 +107,13 @@ Options:
                 echo "Please provide a MYSQL Database Hostname (-h)\n";
                 return;
             }
+
+            if (array_key_exists("d", $commands) && $commands["h"]) {
+                $this->databaseName = $commands["d"];
+            }
             //*/
 
-            $database = UserDatabase::getDriver($this->username, $this->password, $this->host);
+            $database = UserDatabase::getDriver($this->username, $this->password, $this->host, $this->databaseName);
             if (is_null($database)) {
                 return;
             }
@@ -241,15 +248,13 @@ class Row {
 }
 
 class UserDatabase {
-    const DSN_BASE = "mysql:dbname=catalystUsers;host=";
-
     private static $driver = null;
 
     private $db = null;
 
-    private function __construct($username, $password, $host) {
+    private function __construct($username, $password, $host, $database) {
         try {
-            $dsn = "mysql:dbname=catalystUsers;host=" . $host;
+            $dsn = sprintf("mysql:dbname=%s;host=%s", $database, $host);
             $this->db = new PDO($dsn, $username, $password);
         } catch (PDOException $exception) {
             echo "Connection Failed: " . $exception->getMessage() . "\n";
@@ -261,14 +266,15 @@ class UserDatabase {
      * Otherwise, returns the current database driver.
      * If an error occurs when initializing the database, a null object is returned.
      *
-     * @param $username
-     * @param $password
-     * @param $host
-     * @return null|UserDatabase
+     * @param string $username      MySQL Database Username
+     * @param string $password      MySQL Database Password
+     * @param string $host          MySQL Database Hostname
+     * @param string $database      MySQL Database name
+     * @return UserDatabase         A UserDatabase object
      */
-    public static function getDriver($username, $password, $host) {
+    public static function getDriver($username, $password, $host, $database) {
         if (!self::$driver) {
-            self::$driver = new UserDatabase($username, $password, $host);
+            self::$driver = new UserDatabase($username, $password, $host, $database);
         }
 
         return self::$driver;
