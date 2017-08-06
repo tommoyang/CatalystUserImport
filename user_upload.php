@@ -140,6 +140,9 @@ Options:
                 echo "File could not be read (are you pointing to the right file and/or does it exist?";
                 return;
             }
+        } else if (!$this->createTable) {
+            echo "Please specify a file to import (--file [csv file name])\n";
+            return;
         }
 
         // --simple_names              Removes all special characters from names
@@ -186,7 +189,7 @@ Options:
      */
     private function readCsv($file) {
         if (!$this->dryRun && !$this->database->isUsersExists()) {
-            echo "Users database does not exist. Please run this script using the --create_table command";
+            echo "Users table does not exist. Please run this script using the --create_table command";
             return;
         }
 
@@ -194,21 +197,21 @@ Options:
             $row = array_map("trim", $row);
 
             // Exclude column name row
-            if ($row[0] == "name" && $row[1] == "surname" && $row[2] == "email") continue;
+            if (strtolower($row[0]) == "name" && strtolower($row[1]) == "surname" && strtolower($row[2]) == "email") continue;
 
-            $rowObj = new Row($row[0], $row[1], $row[2], $this->simpleNames);
+            $user = new User($row[0], $row[1], $row[2], $this->simpleNames);
 
-            if (!filter_var($rowObj->getEmail(), FILTER_VALIDATE_EMAIL)) {
-                echo sprintf("Invalid email, skipping: %s\n", $rowObj->toString());
+            if (!filter_var($user->getEmail(), FILTER_VALIDATE_EMAIL)) {
+                echo sprintf("Invalid email, skipping: %s\n", $user->toString());
                 continue;
             }
 
-            $this->database->insertRow($rowObj, $this->dryRun);
+            $this->database->insertUser($user, $this->dryRun);
         }
     }
 }
 
-class Row {
+class User {
 
     private $name, $surname, $email;
 
@@ -274,10 +277,11 @@ class UserDatabase {
      * Otherwise, returns the current database driver.
      * If an error occurs when initializing the database, a null object is returned.
      *
-     * @param string $username      MySQL Database Username
-     * @param string $password      MySQL Database Password
-     * @param string $host          MySQL Database Hostname
-     * @param string $database      MySQL Database name
+     * @param string $username MySQL Database Username
+     * @param string $password MySQL Database Password
+     * @param string $host     MySQL Database Hostname
+     * @param string $database MySQL Database name
+     *
      * @return UserDatabase         A UserDatabase object
      */
     public static function getDriver($username, $password, $host, $database) {
@@ -342,18 +346,18 @@ CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
     /**
      * Inserts a user into the database.
      *
-     * @param Row $row The user to insert
+     * @param User $user    The user to insert
      * @param bool $dry_run FALSE if values should be input into the database
      */
-    public function insertRow($row, $dry_run = false) {
+    public function insertUser($user, $dry_run = false) {
         // Check if email already exists in table
         $testUserExistsQuery = /** @lang MySQL */
             "SELECT u.email FROM users u WHERE u.email = ?";
         $statement = $this->db->prepare($testUserExistsQuery);
-        $success = $statement->execute(array($row->getEmail()));
+        $success = $statement->execute(array($user->getEmail()));
 
         if ($success === false) {
-            echo sprintf("An error occurred when checking for user: %s\n"), $row->toString();
+            echo sprintf("An error occurred when checking for user: %s\n"), $user->toString();
             echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
             echo "No changes have been made.\n";
 
@@ -364,20 +368,20 @@ CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
 
         // Email already exists
         if (count($result) > 0) {
-            echo sprintf("User already exists, skipping: %s\n", $row->toString());
+            echo sprintf("User already exists, skipping: %s\n", $user->toString());
             return;
         }
 
         $this->db->beginTransaction();
 
-        $insertRowQuery = /** @lang MySQL */
+        $insertUserQuery = /** @lang MySQL */
             "INSERT INTO users (`name`, `surname`, `email`) VALUES (?, ?, ?)";
 
-        $statement = $this->db->prepare($insertRowQuery);
-        $success = $statement->execute(array($row->getName(), $row->getSurname(), $row->getEmail()));
+        $statement = $this->db->prepare($insertUserQuery);
+        $success = $statement->execute(array($user->getName(), $user->getSurname(), $user->getEmail()));
 
         if ($success === false) {
-            echo sprintf("User was not added: %s\n", $row->toString());
+            echo sprintf("User was not added: %s\n", $user->toString());
             echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
             echo "No changes have been made.\n";
 
@@ -398,8 +402,9 @@ class Tools {
     /**
      * Returns a string with the first character capitalised and the rest lower case
      *
-     * @param string $input     String to format
-     * @return string           Formatted string
+     * @param string $input String to format
+     *
+     * @return string   Formatted string
      */
     public static function nameFormat($input) {
         return ucfirst(strtolower($input));
@@ -408,8 +413,9 @@ class Tools {
     /**
      * Returns a string with all non-alphabetical characters removed
      *
-     * @param string $input     String to format
-     * @return string           Formatted string
+     * @param string $input String to format
+     *
+     * @return string   Formatted string
      */
     public static function alphabeticalOnly($input) {
         return preg_replace("/[^A-Za-z]+/", "", $input);
