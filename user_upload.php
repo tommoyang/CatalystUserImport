@@ -169,12 +169,14 @@ Options:
             // Exclude column name row
             if ($row[0] == "name" && $row[1] == "surname" && $row[2] == "email") continue;
 
-            $success = self::formatRow($row);
-
-            if (!$success) continue;
+            $rowObj = self::formatRow($row);
+            if (!filter_var($rowObj->getEmail(), FILTER_VALIDATE_EMAIL)) {
+                echo sprintf("Invalid email, skipping: %s\n", $rowObj->toString());
+                continue;
+            }
 
             if ($this->dryRun) {
-                echo sprintf("Found row: %s\n", self::printableRow($row));
+                echo sprintf("Found row: %s\n", $rowObj->toString());
             } else {
                 // TODO: Database commands
             }
@@ -187,25 +189,54 @@ Options:
      * Rows with invalid emails will be skipped
      *
      * @param $row
-     * @return bool
+     * @return Row
      */
-    private static function formatRow(&$row) {
+    private static function formatRow($row) {
         $row = array_map("trim", $row);
 
-        if (filter_var($row[2], FILTER_VALIDATE_EMAIL)) {
-            $row[0] = Tools::nameFormat($row[0]);
-            $row[1] = Tools::nameFormat($row[1]);
-            $row[2] = strtolower($row[2]);
+        $rowObj = new Row($row[0], $row[1], $row[2]);
+        return $rowObj;
+    }
+}
 
-            return true;
-        } else {
-            echo sprintf("Invalid email, skipping: %s\n", self::printableRow($row));
-            return false;
-        }
+class Row {
+
+    private $name, $surname, $email;
+
+    public function __construct($name, $surname, $email) {
+        $this->name = Tools::nameFormat($name);
+        $this->surname = Tools::nameFormat($surname);
+        $this->email = strtolower($email);
     }
 
-    private static function printableRow($row) {
-        return sprintf("{'%s', '%s', '%s'}", $row[0], $row[1], $row[2]);
+    /**
+     * @return string
+     */
+    public function getName() {
+        return $this->name;
+    }
+
+    /**
+     * @return string
+     */
+    public function getSurname() {
+        return $this->surname;
+    }
+
+    /**
+     * @return string
+     */
+    public function getEmail() {
+        return $this->email;
+    }
+
+    /**
+     * Returns a string representation of the row
+     *
+     * @return string
+     */
+    public function toString() {
+        return sprintf("{'%s', '%s', '%s'}", $this->name, $this->surname, $this->email);
     }
 }
 
