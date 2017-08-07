@@ -90,43 +90,38 @@ Options:
             $this->createTable = true;
         }
 
-        // --dry_run        Used with --file, runs the script without altering the database.
-        if (!$this->createTable && array_key_exists("dry_run", $commands)) {
-            $this->dryRun = true;
+        //*
+        if (array_key_exists("u", $commands) && $commands["u"]) {
+            $this->username = $commands["u"];
         } else {
-            //*
-            if (array_key_exists("u", $commands) && $commands["u"]) {
-                $this->username = $commands["u"];
-            } else {
-                echo "Please provide a MYSQL Database Username (-u)\n";
-                return;
-            }
-
-            if (array_key_exists("p", $commands) && $commands["p"]) {
-                $this->password = $commands["p"];
-            } else {
-                echo "Please provide a MYSQL Database Password (-p)\n";
-                return;
-            }
-
-            if (array_key_exists("h", $commands) && $commands["h"]) {
-                $this->host = $commands["h"];
-            } else {
-                echo "Please provide a MYSQL Database Hostname (-h)\n";
-                return;
-            }
-
-            if (array_key_exists("d", $commands) && $commands["h"]) {
-                $this->databaseName = $commands["d"];
-            }
-            //*/
-
-            $database = UserDatabase::getDriver($this->username, $this->password, $this->host, $this->databaseName);
-            if (is_null($database)) {
-                return;
-            }
-            $this->database = $database;
+            echo "Please provide a MYSQL Database Username (-u)\n";
+            return;
         }
+
+        if (array_key_exists("p", $commands) && $commands["p"]) {
+            $this->password = $commands["p"];
+        } else {
+            echo "Please provide a MYSQL Database Password (-p)\n";
+            return;
+        }
+
+        if (array_key_exists("h", $commands) && $commands["h"]) {
+            $this->host = $commands["h"];
+        } else {
+            echo "Please provide a MYSQL Database Hostname (-h)\n";
+            return;
+        }
+
+        if (array_key_exists("d", $commands) && $commands["d"]) {
+            $this->databaseName = $commands["d"];
+        }
+        //*/
+
+        $database = UserDatabase::getDriver($this->username, $this->password, $this->host, $this->databaseName);
+        if (is_null($database)) {
+            return;
+        }
+        $this->database = $database;
 
         // --file [csv file name]       The name of the CSV file to be parsed
         if (array_key_exists("file", $commands) && $commands["file"]) {
@@ -143,6 +138,11 @@ Options:
         } else if (!$this->createTable) {
             echo "Please specify a file to import (--file [csv file name])\n";
             return;
+        }
+
+        // --dry_run        Used with --file, runs the script without altering the database.
+        if (!$this->createTable && array_key_exists("dry_run", $commands)) {
+            $this->dryRun = true;
         }
 
         // --simple_names              Removes all special characters from names
@@ -193,6 +193,8 @@ Options:
             return;
         }
 
+        $users = array();
+
         while ($row = fgetcsv($file)) {
             $row = array_map("trim", $row);
 
@@ -206,8 +208,10 @@ Options:
                 continue;
             }
 
-            $this->database->insertUser($user, $this->dryRun);
+            $users[] = $user;
         }
+
+        $this->database->insertUsers($users, $this->dryRun);
     }
 }
 
@@ -344,49 +348,51 @@ CREATE UNIQUE INDEX users_email_uindex ON `users` (email);";
     }
 
     /**
-     * Inserts a user into the database.
+     * Inserts an array of users into the database.
      *
-     * @param User $user    The user to insert
-     * @param bool $dry_run FALSE if values should be input into the database
+     * @param array $users   The array of users to insert
+     * @param bool  $dry_run TRUE if values should not be input into the database (defaults to FALSE)
      */
-    public function insertUser($user, $dry_run = false) {
-        // Check if email already exists in table
-        $testUserExistsQuery = /** @lang MySQL */
-            "SELECT u.email FROM users u WHERE u.email = ?";
-        $statement = $this->db->prepare($testUserExistsQuery);
-        $success = $statement->execute(array($user->getEmail()));
-
-        if ($success === false) {
-            echo sprintf("An error occurred when checking for user: %s\n"), $user->toString();
-            echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
-            echo "No changes have been made.\n";
-
-            return;
-        }
-
-        $result = $statement->fetchAll();
-
-        // Email already exists
-        if (count($result) > 0) {
-            echo sprintf("User already exists, skipping: %s\n", $user->toString());
-            return;
-        }
-
+    public function insertUsers($users, $dry_run = false) {
         $this->db->beginTransaction();
 
-        $insertUserQuery = /** @lang MySQL */
-            "INSERT INTO users (`name`, `surname`, `email`) VALUES (?, ?, ?)";
+        foreach ($users as $user) {
+            // Check if email already exists in table
+            $testUserExistsQuery = /** @lang MySQL */
+                "SELECT u.email FROM users u WHERE u.email = ?";
+            $statement = $this->db->prepare($testUserExistsQuery);
+            $success = $statement->execute(array($user->getEmail()));
 
-        $statement = $this->db->prepare($insertUserQuery);
-        $success = $statement->execute(array($user->getName(), $user->getSurname(), $user->getEmail()));
+            if ($success === false) {
+                echo sprintf("An error occurred when checking for user: %s\n"), $user->toString();
+                echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
+                echo "User has not been added to the database.\n";
 
-        if ($success === false) {
-            echo sprintf("User was not added: %s\n", $user->toString());
-            echo sprintf("\t%s\n", $this->db->errorInfo()[2]);
-            echo "No changes have been made.\n";
+                continue;
+            }
 
-            $this->db->rollBack();
-            return;
+            $result = $statement->fetchAll();
+
+            // Email already exists
+            if (count($result) > 0) {
+                echo sprintf("User already exists, skipping: %s\n", $user->toString());
+                continue;
+            }
+
+            $insertUserQuery = /** @lang MySQL */
+                "INSERT INTO users (`name`, `surname`, `email`) VALUES (?, ?, ?)";
+
+            $statement = $this->db->prepare($insertUserQuery);
+            $success = $statement->execute(array($user->getName(), $user->getSurname(), $user->getEmail()));
+
+            if ($success === false) {
+                echo sprintf("An error occurred when adding User: %s\n", $user->toString());
+                echo sprintf("\t%s\n", $statement->errorInfo()[2]);
+                echo "User has not been added to the database.\n";
+                $this->db->rollBack();
+
+                return;
+            }
         }
 
         if ($dry_run) {
